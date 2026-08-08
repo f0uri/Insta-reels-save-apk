@@ -8,4 +8,4 @@ package com.example.data.service
  * your real backend URL (no trailing slash), otherwise link resolution will
  * fail with a connection error.
  */
-const val BACKEND_BASE_URL = "https://your-app.up.railway.app"
+const val BACKEND_BASE_URL = "https://insta-reels-save-apk-production.up.railway.app"
