@@ -9,7 +9,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const util = require('util');
 
 const execFileAsync = util.promisify(execFile);
@@ -124,8 +124,90 @@ app.post('/api/resolve', async (req, res) => {
   }
 });
 
+// Streams the ACTUAL video/audio bytes to the client by running yt-dlp
+// end-to-end on the server and piping its output directly to the response.
+// This is the key fix for CDN links that reject the phone's direct request
+// (expired/signed URLs, missing cookies, anti-hotlink checks, etc.) - since
+// yt-dlp itself does the real download here, every platform is handled the
+// same reliable way, not just metadata extraction.
+app.get('/api/download', (req, res) => {
+  const { url, height, mode } = req.query;
+
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return res.status(400).json({ success: false, error: 'رابط غير صالح' });
+  }
+
+  const isAudio = mode === 'audio';
+  const formatSelector = isAudio
+    ? 'bestaudio/best'
+    : height
+      ? `best[height<=${height}][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]/best`
+      : 'best[acodec!=none][vcodec!=none]/best';
+
+  const args = [];
+  if (isAudio) {
+    args.push('-x', '--audio-format', 'mp3');
+  }
+  args.push(
+    '-f', formatSelector,
+    '--no-warnings',
+    '--no-playlist',
+    '--socket-timeout', '20',
+    '-o', '-',
+    url.trim()
+  );
+
+  const ytdlp = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let headersSent = false;
+  let stderrBuf = '';
+
+  ytdlp.stdout.once('data', () => {
+    if (!headersSent) {
+      headersSent = true;
+      res.status(200);
+      res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="download.${isAudio ? 'mp3' : 'mp4'}"`
+      );
+    }
+  });
+
+  ytdlp.stdout.pipe(res);
+
+  ytdlp.stderr.on('data', (chunk) => {
+    stderrBuf += chunk.toString();
+  });
+
+  ytdlp.on('error', () => {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'فشل تشغيل أداة التحميل على الخادم' });
+    }
+  });
+
+  ytdlp.on('close', (code) => {
+    if (code !== 0 && !headersSent) {
+      console.error('yt-dlp download error:', stderrBuf.slice(-2000));
+      if (!res.headersSent) {
+        res.status(422).json({
+          success: false,
+          error: 'تعذر تحميل الفيديو، الرابط قد يكون منتهي الصلاحية أو خاصاً'
+        });
+      }
+    } else {
+      res.end();
+    }
+  });
+
+  req.on('close', () => {
+    if (!ytdlp.killed) ytdlp.kill('SIGKILL');
+  });
+});
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {
   console.log(`Reels Downloader API (yt-dlp powered) running on port ${PORT}`);
 });
+
