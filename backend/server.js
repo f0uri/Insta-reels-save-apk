@@ -51,7 +51,14 @@ app.post('/api/resolve', async (req, res) => {
   try {
     const { stdout } = await execFileAsync(
       'yt-dlp',
-      ['-j', '--no-warnings', '--no-playlist', '--socket-timeout', '20', cleanUrl],
+      [
+        '-j',
+        '--no-warnings',
+        '--no-playlist',
+        '-f', 'best[acodec!=none][vcodec!=none]/best',
+        '--socket-timeout', '20',
+        cleanUrl
+      ],
       { maxBuffer: 1024 * 1024 * 25, timeout: 35000 }
     );
 
@@ -64,13 +71,13 @@ app.post('/api/resolve', async (req, res) => {
 
     let streams = [];
     if (Array.isArray(info.formats) && info.formats.length > 0) {
-      // Prefer formats that have both video and audio (no separate mux needed).
+      // Only offer formats that have BOTH video and audio muxed together -
+      // never fall back to a video-only stream, otherwise playback has no sound.
       const combined = info.formats.filter(
         (f) => f.url && f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none'
       );
-      const candidates = combined.length > 0 ? combined : info.formats.filter((f) => f.url);
 
-      streams = candidates
+      streams = combined
         .sort((a, b) => (b.height || 0) - (a.height || 0))
         .slice(0, 4)
         .map((f) => ({
@@ -83,6 +90,9 @@ app.post('/api/resolve', async (req, res) => {
         }));
     }
 
+    // info.url is the direct result of our forced format selector above
+    // (best[acodec!=none][vcodec!=none]/best), so it is guaranteed to have
+    // audio whenever the platform has any muxed format available at all.
     if (streams.length === 0 && info.url) {
       streams = [{ quality: 'auto', downloadUrl: info.url, estimatedSizeMb: null }];
     }
