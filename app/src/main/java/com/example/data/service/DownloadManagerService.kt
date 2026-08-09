@@ -66,10 +66,25 @@ class DownloadManagerService(private val context: Context) {
             val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val fileName = "${platform.folderName}_${dateStr}_$sanitizedTitle.mp4"
 
-            val request = Request.Builder()
+            val referer = when (platform) {
+                PlatformType.INSTAGRAM -> "https://www.instagram.com/"
+                PlatformType.TIKTOK -> "https://www.tiktok.com/"
+                PlatformType.FACEBOOK -> "https://www.facebook.com/"
+                PlatformType.YOUTUBE -> "https://www.youtube.com/"
+                else -> null
+            }
+
+            val requestBuilder = Request.Builder()
                 .url(videoUrl)
-                .header("User-Agent", "Mozilla/5.0")
-                .build()
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                )
+            if (referer != null) {
+                requestBuilder.header("Referer", referer)
+            }
+            val request = requestBuilder.build()
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful || response.body == null) {
