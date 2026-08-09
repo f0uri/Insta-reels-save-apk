@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             // Gentle dhikr reminder - shown briefly each time the app opens
-                            DhikrReminderBanner(modifier = Modifier.align(Alignment.TopCenter))
+                            DhikrReminderBanner(modifier = Modifier.align(Alignment.BottomCenter))
                         }
 
                         // Dialog Overlays
