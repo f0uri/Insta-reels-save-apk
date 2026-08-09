@@ -82,7 +82,7 @@ fun DhikrReminderBanner(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "لا تنسَ ذكر الله 🤲 استغفر الله، سبّحان الله، وصلِّ على النبي ﷺ",
+                    text = "استغفر الله، سبّحان الله، و لا إله الا الله",
                     fontSize = 12.5.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
