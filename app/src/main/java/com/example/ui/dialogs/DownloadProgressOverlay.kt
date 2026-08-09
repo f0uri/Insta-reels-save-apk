@@ -32,6 +32,36 @@ import com.example.data.service.DownloadState
 import com.example.ui.util.AppLanguage
 import com.example.ui.util.StringResources
 
+/**
+ * Maps the raw error code/message coming from DownloadManagerService into a
+ * clear, actionable message for the user - instead of always showing a
+ * generic "unknown error" that hides what actually went wrong.
+ */
+private fun friendlyDownloadError(rawMessage: String, language: AppLanguage): String {
+    val isAr = language == AppLanguage.ARABIC
+    return when {
+        rawMessage == "SAVE_TO_GALLERY_FAILED" ->
+            if (isAr) "تعذر حفظ الفيديو في المعرض. تحقق من مساحة التخزين المتوفرة على جهازك."
+            else "Could not save the video to your gallery. Check your device's available storage."
+
+        rawMessage.startsWith("HTTP_ERROR_") -> {
+            val code = rawMessage.removePrefix("HTTP_ERROR_")
+            if (isAr) "فشل تحميل الفيديو من الخادم (رمز الخطأ $code). قد يكون الرابط منتهي الصلاحية، جرب تستخرج الفيديو من جديد."
+            else "Failed to download the video from the server (error $code). The link may have expired - try extracting it again."
+        }
+
+        rawMessage.contains("Unable to resolve host", ignoreCase = true) ->
+            if (isAr) "لا يوجد اتصال بالإنترنت." else "No internet connection."
+
+        rawMessage.contains("timeout", ignoreCase = true) ->
+            if (isAr) "انتهت مهلة الاتصال، حاول مجدداً." else "Connection timed out, please try again."
+
+        rawMessage.isBlank() -> StringResources.getString("unknown_error", language)
+
+        else -> rawMessage
+    }
+}
+
 @Composable
 fun DownloadProgressOverlay(
     downloadState: DownloadState,
@@ -149,10 +179,11 @@ fun DownloadProgressOverlay(
 
                     is DownloadState.Error -> {
                         Text(
-                            text = StringResources.getString("unknown_error", language),
+                            text = friendlyDownloadError(downloadState.message, language),
                             color = Color(0xFFFF453A),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
