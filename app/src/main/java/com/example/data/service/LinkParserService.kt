@@ -31,6 +31,8 @@ class LinkParserService {
         .readTimeout(40, TimeUnit.SECONDS)
         .build()
 
+    private val listnr = ListnrService()
+
     suspend fun parseLink(rawUrl: String): Result<VideoMetadata> = withContext(Dispatchers.IO) {
         val cleanUrl = rawUrl.trim()
         if (cleanUrl.isBlank() || (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://"))) {
@@ -44,8 +46,19 @@ class LinkParserService {
         }
 
         val platform = PlatformType.detectFromUrl(cleanUrl)
+        val backendResult = resolveViaBackend(cleanUrl, platform)
+        if (backendResult.isSuccess) return@withContext backendResult
 
-        try {
+        if (platform == PlatformType.INSTAGRAM) {
+            val listnrResult = listnr.resolve(cleanUrl)
+            if (listnrResult.isSuccess) return@withContext listnrResult
+        }
+
+        backendResult
+    }
+
+    private fun resolveViaBackend(cleanUrl: String, platform: PlatformType): Result<VideoMetadata> {
+        return try {
             val payload = JSONObject().apply { put("url", cleanUrl) }
             val body = payload.toString()
                 .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
@@ -58,19 +71,21 @@ class LinkParserService {
 
             client.newCall(request).execute().use { response ->
                 val responseText = response.body?.string()
-                    ?: return@withContext Result.failure(Exception("لا يوجد رد من الخادم"))
+                    ?: return Result.failure(Exception("لا يوجد رد من الخادم"))
 
-                val json = JSONObject(responseText)
+                val json = runCatching { JSONObject(responseText) }.getOrElse {
+                    return Result.failure(Exception("تعذر استخراج الفيديو من هذا الرابط"))
+                }
                 val success = json.optBoolean("success", false)
 
                 if (!response.isSuccessful || !success) {
                     val serverError = json.optString("error", "تعذر استخراج الفيديو من هذا الرابط")
-                    return@withContext Result.failure(Exception(serverError))
+                    return Result.failure(Exception(serverError))
                 }
 
                 val streamsJson: JSONArray = json.optJSONArray("streams") ?: JSONArray()
                 if (streamsJson.length() == 0) {
-                    return@withContext Result.failure(Exception("لم يتم العثور على وسائط قابلة للتحميل"))
+                    return Result.failure(Exception("لم يتم العثور على وسائط قابلة للتحميل"))
                 }
 
                 val streams = mutableListOf<VideoQualityStream>()
@@ -92,7 +107,7 @@ class LinkParserService {
                 }
 
                 if (streams.isEmpty()) {
-                    return@withContext Result.failure(Exception("لم يتم العثور على وسائط قابلة للتحميل"))
+                    return Result.failure(Exception("لم يتم العثور على وسائط قابلة للتحميل"))
                 }
 
                 val metadata = VideoMetadata(

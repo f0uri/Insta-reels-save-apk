@@ -153,10 +153,11 @@ class MainViewModel(private val repository: VideoRepository) : ViewModel() {
             append("&mode=").append(modeParam)
             if (heightParam != null) append("&height=").append(heightParam)
         }
+        val fetchUrl = if (stream.isDirect) stream.downloadUrl else proxyUrl
 
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
-            repository.downloadVideo(proxyUrl, metadata.platform, metadata.title)
+            repository.downloadVideo(fetchUrl, metadata.platform, metadata.title)
                 .collect { state ->
                     _downloadState.value = state
                     if (state is DownloadState.Completed) {
