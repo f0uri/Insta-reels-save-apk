@@ -44,7 +44,8 @@ data class VideoQualityStream(
     val quality: VideoQuality,
     val downloadUrl: String,
     val estimatedSizeMb: Double,
-    val format: MediaFormat = MediaFormat.MP4
+    val format: MediaFormat = MediaFormat.MP4,
+    val isDirect: Boolean = false,
 )
 
 data class VideoMetadata(
